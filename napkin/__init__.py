@@ -6,6 +6,7 @@ import lib2to3.fixes
 import lib2to3.refactor
 import math
 import sys
+import tempfile
 from collections.abc import Iterable
 from lib2to3 import fixer_base
 
@@ -59,7 +60,7 @@ def find_deps(name):
 
 def transitive_closure(deps, name):
     out = [name]
-    for n in deps[name]:
+    for n in deps.get(name, []):
         out += transitive_closure(deps, n)
     return out
 
@@ -176,7 +177,8 @@ def constants(filename):
 def translate(filename):
     outputs = find_outputs(filename)
     rt = lib2to3.refactor.RefactoringTool(('napkin.substitute',), {'NAPKIN': Tool(outputs)})
-    translated = (rt.refactor_string(open(filename).read(), filename))
+    contents = open(filename).read()
+    translated = (rt.refactor_string(contents, filename))
     return str(translated).rstrip()
 
 def main():
@@ -190,7 +192,7 @@ def main():
     parser.add_argument('--constants', '-c', action='store_true',
             dest='constants', default=None,
             help='print all contants')
-    parser.add_argument('input', help='input napkin filename')
+    parser.add_argument('input', nargs='*', help='input napkin filename')
 
     args = parser.parse_args()
 
@@ -214,7 +216,13 @@ def main():
         for c in sorted(constants(args.input)):
             print(c)
     if len(actions) == 0:
-        print(translate(args.input).rstrip())
+        content = ''
+        for x in args.input:
+            content += open(x).read() + '\n'
+        with tempfile.NamedTemporaryFile() as tmp:
+            tmp.write(content.encode('utf8'))
+            tmp.flush()
+            print(translate(tmp.name).rstrip())
 
 if __name__ == '__main__':
     main()
