@@ -11,6 +11,7 @@ from collections.abc import Iterable
 from lib2to3 import fixer_base
 
 import napkin.units
+import napkin.latency
 
 CONTEXT = {
     # helpful
@@ -23,6 +24,7 @@ CONTEXT = {
     'log2': math.log2,
 }
 CONTEXT.update(napkin.units.CONTEXT)
+CONTEXT.update(napkin.latency.CONTEXT)
 
 def is_variable_assignment(node):
     if not isinstance(node, ast.Assign):
@@ -71,7 +73,12 @@ VALID_UNITS = [
     'sigfig',
     'percent',
     'raw',
+    'hide',
+    'percentiles',
 ]
+
+for _x in tuple(VALID_UNITS):
+    VALID_UNITS.append('percentiles:' + _x)
 
 def humanize_bytes(x):
     return napkin.units.humanize_metric(x, base=1024) + 'iB'
@@ -129,8 +136,21 @@ class Tool:
         return self._substitute(output, units)
 
     def _substitute(self, output, units):
+        if units == 'hide':
+            return '...'
+        if isinstance(output, napkin.latency.SLA):
+            PERCENTILES_PREFIX = 'percentiles:'
+            if units and units.startswith(PERCENTILES_PREFIX):
+                units = units[len(PERCENTILES_PREFIX):]
+            if units == 'percentiles':
+                units = 'raw'
+            return 'SLA(' + ', '.join(('({}, {})'.format(x, self._substitute(round(fx, 3), units)) for (x, fx) in output.percentiles[1:])) + ')'
+        if isinstance(output, napkin.latency.PMF):
+            return 'PMF(...)'
+        if isinstance(output, napkin.latency.CDF):
+            return 'CDF(...)'
         if isinstance(output, Iterable):
-            return '[' + ', '.join([self._substitute(x, units) for x in output]) + ']'
+            return '[' + ', '.join((self._substitute(x, units) for x in output)) + ']'
         if units is not None:
             units = {
                 'bytes/sec': 'bytes_sec'
